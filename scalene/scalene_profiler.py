@@ -188,13 +188,6 @@ def parse_args() -> Tuple[argparse.Namespace, List[str]]:
         default=100,
         help="only report profiles with at least this many allocations (default: 100)",
     )
-    parser.add_argument(
-        "--malloc-replacement",
-        dest="malloc_replacement",
-        type=str,
-        default=None,
-        help="Path to library of malloc replacement"
-    )
     # the PID of the profiling process (for internal use only)
     parser.add_argument("--pid", type=int, default=0, help=argparse.SUPPRESS)
     # Parse out all Scalene arguments and jam the remaining ones into argv.
@@ -234,8 +227,6 @@ if (
             os.environ["LD_PRELOAD"] = os.path.join(
                 os.path.dirname(__file__), "libscalene.so"
             )
-            if arguments.malloc_replacement:
-                os.environ["LD_PRELOAD"] += ":" + arguments.malloc_replacement
             os.environ["PYTHONMALLOC"] = "malloc"
             args = sys.argv[1:]
             args = [os.path.basename(sys.executable), "-m", "scalene"] + args
@@ -1019,7 +1010,12 @@ class Scalene:
             signum: Union[Callable[[Signals, FrameType], None], int, Handlers, None],
             frame: FrameType,
     ) -> None:
+        """
+        Receives a signal sent by a child process (0 return code) after a fork and mutates
+        current profiler into a child.
+        """
         Scalene.__is_child = True
+        # Note-- __parent_pid of the topmost process is its own pid
         arguments.pid = Scalene.__parent_pid
     @staticmethod
     def memcpy_event_signal_handler(
@@ -1528,7 +1524,6 @@ class Scalene:
 
     @staticmethod
     def main() -> None:
-        # import scalene.replacement_rlock
         """Invokes the profiler from the command-line."""
         try:
             args, left = parse_args()  # We currently do this twice, but who cares.
