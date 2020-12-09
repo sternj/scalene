@@ -604,9 +604,11 @@ class Scalene:
 
         # Hijack join.
         import scalene.replacement_thread_join
+
         # hijack fork
         import scalene.replacement_fork
         import scalene.replacement_exit
+
         if "cpu_percent_threshold" in arguments:
             Scalene.__cpu_percent_threshold = int(arguments.cpu_percent_threshold)
         if "malloc_threshold" in arguments:
@@ -839,6 +841,9 @@ class Scalene:
     ) -> List[Tuple[FrameType, int, FrameType]]:
         """Collects all stack frames that Scalene actually processes."""
         if threading._active_limbo_lock.locked():
+            # Avoids deadlock where a Scalene signal occurs
+            # in the middle of a critical section of the
+            # threading library
             return None
         frames: List[Tuple[FrameType, int]] = [
             (
@@ -1007,8 +1012,8 @@ class Scalene:
                 Scalene.__total_memory_free_samples += before - after
     @staticmethod
     def fork_signal_handler(
-            signum: Union[Callable[[Signals, FrameType], None], int, Handlers, None],
-            frame: FrameType,
+        signum: Union[Callable[[Signals, FrameType], None], int, Handlers, None],
+        frame: FrameType,
     ) -> None:
         """
         Receives a signal sent by a child process (0 return code) after a fork and mutates
@@ -1017,6 +1022,7 @@ class Scalene:
         Scalene.__is_child = True
         # Note-- __parent_pid of the topmost process is its own pid
         arguments.pid = Scalene.__parent_pid
+
     @staticmethod
     def memcpy_event_signal_handler(
         signum: Union[Callable[[Signals, FrameType], None], int, Handlers, None],
