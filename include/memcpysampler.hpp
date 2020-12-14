@@ -2,6 +2,8 @@
 #ifndef MEMCPYSAMPLER_HPP
 #define MEMCPYSAMPLER_HPP
 
+#include <sys/errno.h>
+#include <sys/file.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -123,7 +125,15 @@ private:
     char buf[255];
     stprintf::stprintf(buf, "@,@\n", _memcpyTriggered, _memcpyOps);
     int fd = open(scalene_memcpy_signal_filename, flags, perms);
+    int res = flock(fd, LOCK_EX);
+    if(res == -1) {
+      tprintf::tprintf("Scalene: Error acquiring memcpy signal file lock: @", errno);
+    }
     write(fd, buf, strlen(buf));
+    res = flock(fd, LOCK_UN);
+    if(res == -1) {
+      tprintf::tprintf("Scalene: Error releasing memcpy signal file lock: @", errno);
+    }
     close(fd);
   }
 };

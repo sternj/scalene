@@ -40,6 +40,30 @@ namespace stprintf {
     return (int) (buf - startbuf);
   }
 
+  //TODO: perhaps make this a bit more tolerant of invalid numbers?
+  inline int atoi(char* buf) {
+    bool negative = false;
+    int res = 0;
+    if(*buf == '-') {
+      negative = true;
+      buf++;
+    }
+    while(*buf != '\0') {
+      res *= 10;
+      res += *buf++ - '0';
+    }
+    return negative ? -res : res;
+    // if (i < 0) {
+    //   *buf++ = '-';
+    //   i = -i;
+    // }
+    // do {
+    //   *buf++ = (i / 10) + '0';
+    //   i %= 10;
+    // } while(i >= 0);
+    // *buf = '\0';
+  }
+
   inline int ftoa(char * buf, double n, int decimalPlaces = 8) {
     // Extract integer part
     auto ipart = (long) n;
