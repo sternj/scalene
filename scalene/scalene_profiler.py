@@ -16,6 +16,7 @@ import builtins
 import cloudpickle
 import dis
 import functools
+import fcntl
 import inspect
 import mmap
 import multiprocessing
@@ -470,7 +471,8 @@ class Scalene:
     fork_signal = signal.SIGTSTP
     # Whether we are in a signal handler or not (to make things properly re-entrant).
     __in_signal_handler = threading.Lock()
-
+    __mp_lock = multiprocessing.Lock()
+    __malloc_seek_lock = threading.Lock()
     # Program-specific information:
     #   the name of the program being profiled
     __program_being_profiled = Filename("")
@@ -554,6 +556,7 @@ class Scalene:
             Scalene.__cpu_signal = signal.SIGALRM
         elif Scalene.__cpu_timer_signal == signal.ITIMER_VIRTUAL:
             Scalene.__cpu_signal = signal.SIGVTALRM
+
         elif Scalene.__cpu_timer_signal == signal.ITIMER_PROF:
             Scalene.__cpu_signal = signal.SIGPROF
             # NOT SUPPORTED
@@ -600,6 +603,7 @@ class Scalene:
 
         # Hijack lock.
         import scalene.replacement_lock
+        import scalene.replacement_mp_lock
         import scalene.replacement_poll_selector
 
         # Hijack join.
@@ -921,35 +925,52 @@ class Scalene:
     ) -> None:
         """Handle interrupts for memory profiling (mallocs and frees)."""
         new_frames = Scalene.compute_frames_to_record(this_frame)
+
         if not new_frames:
             return
-
+        curr_pid = os.getpid()
         # Process the input array from where we left off reading last time.
         arr: List[Tuple[int, str, float, float]] = []
-        try:
-            mm = Scalene.__malloc_signal_mmap
-            mm.seek(Scalene.__malloc_signal_position)
-            while True:
-                count_str = mm.readline().rstrip().decode("ascii")
-                if count_str == "":
-                    break
-                (
-                    action,
-                    alloc_time_str,
-                    count_str,
-                    python_fraction_str,
-                ) = count_str.split(",")
-                arr.append(
-                    (
-                        int(alloc_time_str),
-                        action,
-                        float(count_str),
-                        float(python_fraction_str),
-                    )
-                )
-            Scalene.__malloc_signal_position = mm.tell() - 1
-        except FileNotFoundError:
-            pass
+        with open(Scalene.__malloc_lock_filename, "r+") as f:
+            fcntl.lockf(f, fcntl.LOCK_EX)
+            try:
+                # with Scalene.__mp_lock:
+                with Scalene.__malloc_seek_lock:
+                    mm = Scalene.__malloc_signal_mmap
+                    mm.seek(Scalene.__malloc_signal_position)
+                    while True:
+                        count_str = mm.readline().rstrip().decode("ascii")
+
+
+                        if count_str == "":
+                            break
+                        try:
+                            (
+                                action,
+                                alloc_time_str,
+                                count_str,
+                                python_fraction_str,
+                                pid
+                            ) = count_str.split(",")
+                            if curr_pid == pid:
+                                arr.append(
+                                    (
+                                        int(alloc_time_str),
+                                        action,
+                                        float(count_str),
+                                        float(python_fraction_str),
+                                    )
+                                )
+                        except Exception as e:
+                            print(Scalene.__malloc_lock_filename)
+                            print(Scalene.__malloc_signal_filename)
+                            print(count_str)
+                            print(count_str.split(','))
+                Scalene.__malloc_signal_position = mm.tell() - 1
+            except FileNotFoundError:
+                pass
+            finally:
+                fcntl.lockf(f, fcntl.F_UNLCK)
 
         arr.sort()
 

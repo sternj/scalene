@@ -2,12 +2,14 @@
 #define SAMPLEHEAP_H
 
 #include <sys/errno.h>
+#include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include <fcntl.h>
 #include <unistd.h> // for getpid()
+#include <pthread.h>
 
 #include <random>
 #include <atomic>
@@ -52,7 +54,28 @@ public:
     // Set up the log file.
     auto pid = getpid();
     stprintf::stprintf(scalene_malloc_signal_filename, "/tmp/scalene-malloc-signal@", pid);
+    stprintf::stprintf(scalene_malloc_signal_lockfilename, "/tmp/scalene-lock@", pid);
     _fd = open(scalene_malloc_signal_filename, flags, perms);
+    // Lock to guarantee that lockfile with counter is created exactly once
+    int res = flock(_fd, LOCK_EX);
+    if(res == -1) {
+      tprintf::tprintf("Scalene: Error acquiring lock to create lockfile: @\n", errno);
+      abort();
+    }
+    int lfd = open(scalene_malloc_signal_lockfilename, O_RDWR);
+    if (lfd == -1) { // file does not exist
+      int lfd2 = open(scalene_malloc_signal_lockfilename, flags, perms);
+      if (lfd2 == -1) {
+        tprintf::tprintf("Scalene: internal error = @\n", errno);
+        abort();
+      }
+      tprintf::tprintf("Writing 0\n");
+      write(lfd2, "0", strlen("0") + 1);
+      close(lfd2);
+    } else {
+      // It's already initialized
+      close(lfd);
+    }
     // Make it so the file can reach the maximum size.
     ftruncate(_fd, MAX_FILE_SIZE);
     _mmap = reinterpret_cast<char *>(mmap(0, MAX_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, _fd, 0));
@@ -149,6 +172,7 @@ private:
 
   open_addr_hashtable<65536> _table; // Maps call stack entries to function names.
   char scalene_malloc_signal_filename[256];
+  char scalene_malloc_signal_lockfilename[256]; 
   int _fd;       // true file descriptor for the log
   char * _mmap;  // address of the first byte of the log
   int _lastpos;  // last position written into the log
@@ -269,10 +293,46 @@ private:
   static constexpr auto perms = S_IRUSR | S_IWUSR;
 
   void writeCount(AllocSignal sig, uint64_t count) {
+  errno = 0;
+    // tprintf::tprintf("Errno here: @\n", errno);
+    // tprintf::tprintf("x tid @\n", pthread_self());
     const auto MAX_BUFSIZE = 1024;
     char buf[MAX_BUFSIZE];
+    int fd = open(scalene_malloc_signal_lockfilename, flags, perms);
+    int open_errno = errno;
+    // tprintf::tprintf("Open errno: @\n", open_errno);
+    // tprintf::tprintf("Filename ");
+    // tprintf::tprintf(scalene_malloc_signal_lockfilename);
+    // tprintf::tprintf("\n");
+    // tprintf::tprintf("fd @\n", fd);
+    if( fd == -1) {
+      tprintf::tprintf("Scalene: Error opening lockfile: @\n", errno);
+      abort();
+    }
+//    tprintf::tprintf("Locking");
+    int res = flock(fd, LOCK_EX);
+    int ferrno = errno;
+    // tprintf::tprintf("flock errno, @\n", ferrno);
+    if(res == -1) {
+      tprintf::tprintf("Scalene: Error acquiring memcpy signal file lock: @\n", errno);
+      abort();
+    }
+//    tprintf::tprintf("Locked");
     if (_pythonCount == 0) {
       _pythonCount = 1; // prevent 0/0
+    }
+    char int_buf[255];
+    int res2 = read(fd, int_buf, 255);
+    // tprintf::tprintf("read Errno @\n", errno);
+    // tprintf::tprintf("read result @\n", res2);
+    // tprintf::tprintf("buf ");
+    // tprintf::tprintf(int_buf);
+    // tprintf::tprintf("\n");
+    int lastpos = stprintf::atoi(int_buf);
+    if(lastpos < 0) {
+      tprintf::tprintf("FAILURE: STOPPING\n");
+      close(fd);
+      exit(255);
     }
 #if 0
     stprintf::stprintf(_mmap + _lastpos,
@@ -282,20 +342,55 @@ private:
 		       count,
 		       (float) _pythonCount / (_pythonCount + _cCount));
 #else
-    //    tprintf::tprintf("count = @\n", count);
-    snprintf(_mmap + _lastpos,
+    // tprintf::tprintf("pid @ \n", getpid());
+    // tprintf::tprintf("LASTPOS @\n", lastpos);
+    // tprintf::tprintf(
+    // "FROM ALLOC: @,@,@,@,@\n",
+    // ((sig == MallocSignal) ? 'M' : 'F'),
+	  //    _mallocTriggered + _freeTriggered,
+	  //    count,
+	  //    (float) _pythonCount / (_pythonCount + _cCount),
+	  //    getpid()
+    // );
+    // //    tprintf::tprintf("count = @\n", count);
+    // tprintf::tprintf("@\n", lastpos);
+    snprintf(_mmap + lastpos,
 	     MAX_BUFSIZE,
 #if defined(__APPLE__)
-	     "%c,%llu,%llu,%f\n\n",
+	     "%c,%llu,%llu,%f,%d\n\n",
 #else
-	     "%c,%lu,%lu,%f\n\n",
+	     "%c,%lu,%lu,%f,%d\n\n",
 #endif
 	     ((sig == MallocSignal) ? 'M' : 'F'),
 	     _mallocTriggered + _freeTriggered,
 	     count,
-	     (float) _pythonCount / (_pythonCount + _cCount));
+	     (float) _pythonCount / (_pythonCount + _cCount),
+	    getpid());
+
 #endif
-    _lastpos += strlen(_mmap + _lastpos) - 1;
+
+    lastpos += strlen(_mmap + lastpos) - 1;
+    // tprintf::tprintf("@\n", lastpos);
+    memset(int_buf, 0, strlen(int_buf));
+    int len = tprintf::itoa(int_buf, lastpos);
+    lseek(fd, 0, SEEK_SET);
+    // tprintf::tprintf("New buf ");
+    // tprintf::tprintf(int_buf);
+    // tprintf::tprintf("\n");
+    // tprintf::tprintf("Amount to write: @\n", len + 1);
+     int written = write(fd, int_buf, len + 1);
+    //  tprintf::tprintf("write errno @\n", errno);
+    // tprintf::tprintf("Written @\n", written);
+    res = flock(fd, LOCK_UN);
+    if(res == -1) {
+      tprintf::tprintf("Scalene: Error releasing memcpy signal file lock: @\n", errno);
+    }
+    int close_res = close(fd);
+
+    // int e = errno;
+    // tprintf::tprintf("Close errno: @\n", e);
+    // tprintf::tprintf("Close result @\n", close_res);
+    // tprintf::tprintf("y\n\n\n");
   }
 
 };
