@@ -952,7 +952,7 @@ class Scalene:
                                 python_fraction_str,
                                 pid
                             ) = count_str.split(",")
-                            if curr_pid == pid:
+                            if int(curr_pid) == int(pid):
                                 arr.append(
                                     (
                                         int(alloc_time_str),
@@ -1255,7 +1255,6 @@ class Scalene:
                 ncpps = n_cpu_percent_python_str
                 ncpcs = n_cpu_percent_c_str
                 nufs = spark_str + n_usage_fraction_str
-
             if not arguments.reduced_profile or ncpps + ncpcs + nufs:
                 tbl.add_row(
                     str(line_no),
@@ -1602,7 +1601,6 @@ class Scalene:
                             exit_status = se.code
                         except BaseException:
                             print(traceback.format_exc())  # for debugging only
-
                         profiler.stop()
                         # If we've collected any samples, dump them.
                         if profiler.output_profiles():
@@ -1625,7 +1623,6 @@ class Scalene:
         except BaseException:
             print("Scalene failed to initialize.\n" + traceback.format_exc())
             sys.exit(-1)
-
 
 if __name__ == "__main__":
     Scalene.main()
