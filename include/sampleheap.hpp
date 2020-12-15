@@ -76,6 +76,11 @@ public:
       // It's already initialized
       close(lfd);
     }
+    res = flock(_fd, LOCK_UN);
+    if(res == -1) {
+      tprintf::tprintf("Scalene: Error releasing lock to create lockfile: @\n", errno);
+      abort();
+    }
     // Make it so the file can reach the maximum size.
     ftruncate(_fd, MAX_FILE_SIZE);
     _mmap = reinterpret_cast<char *>(mmap(0, MAX_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, _fd, 0));
@@ -299,7 +304,6 @@ private:
     const auto MAX_BUFSIZE = 1024;
     char buf[MAX_BUFSIZE];
     int fd = open(scalene_malloc_signal_lockfilename, flags, perms);
-    int open_errno = errno;
     // tprintf::tprintf("Open errno: @\n", open_errno);
     // tprintf::tprintf("Filename ");
     // tprintf::tprintf(scalene_malloc_signal_lockfilename);
@@ -309,10 +313,7 @@ private:
       tprintf::tprintf("Scalene: Error opening lockfile: @\n", errno);
       abort();
     }
-//    tprintf::tprintf("Locking");
     int res = flock(fd, LOCK_EX);
-    int ferrno = errno;
-    // tprintf::tprintf("flock errno, @\n", ferrno);
     if(res == -1) {
       tprintf::tprintf("Scalene: Error acquiring memcpy signal file lock: @\n", errno);
       abort();
