@@ -376,6 +376,7 @@ class Scalene:
     # "   "    free   "       "    "    "
     __total_memory_free_samples: float = 0.0
 
+    __total_memcpy_samples: float = 0.0
     # the current memory footprint
     __current_footprint: float = 0.0
 
@@ -961,6 +962,8 @@ class Scalene:
                                         float(python_fraction_str),
                                     )
                                 )
+                            else:
+                                print("mismatch", curr_pid, pid)
                         except Exception as e:
                             print(Scalene.__malloc_lock_filename)
                             print(Scalene.__malloc_signal_filename)
@@ -1084,6 +1087,7 @@ class Scalene:
                 # Add the byte index to the set for this line.
                 Scalene.__bytei_map[fname][line_no].add(bytei)
                 Scalene.__memcpy_samples[fname][line_no] += count
+                Scalene.__total_memcpy_samples += 1
 
         Scalene.__in_signal_handler.release()
 
@@ -1140,7 +1144,7 @@ class Scalene:
             return False
         current_max = Scalene.__max_footprint
         did_sample_memory: bool = (
-            Scalene.__total_memory_free_samples + Scalene.__total_memory_malloc_samples
+            Scalene.__total_memory_free_samples + Scalene.__total_memory_malloc_samples + Scalene.__total_memcpy_samples
         ) > 0
         # Strip newline
         line = line.rstrip()
@@ -1400,6 +1404,7 @@ class Scalene:
             # We didn't collect samples in source files.
             return False
         # If I have at least one memory sample, then we are profiling memory.
+        print(Scalene.__total_memory_free_samples + Scalene.__total_memory_malloc_samples)
         did_sample_memory: bool = (
             Scalene.__total_memory_free_samples + Scalene.__total_memory_malloc_samples
         ) > 0

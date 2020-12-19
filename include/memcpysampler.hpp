@@ -151,7 +151,8 @@ public:
     : _samplefile((char*) "/tmp/scalene-memcpy-signal@", (char*) "/tmp/scalene-memcpy-lock@"),
       _interval (MemcpySamplingRateBytes),
       _memcpyOps (0),
-      _memcpyTriggered (0)
+      _memcpyTriggered (0),
+      _contention (0)
   {
     signal(MemcpySignal, SIG_IGN);
     auto pid = getpid();
@@ -249,6 +250,7 @@ private:
   uint64_t _memcpyOps;
   unsigned long long _memcpyTriggered;
   uint64_t _interval;
+  int _contention;
   char scalene_memcpy_signal_filename[255];
 
   void writeCount() {
