@@ -46,7 +46,8 @@ public:
       _freeTriggered (0),
       _pythonCount (0),
       _cCount (0),
-      _lastpos (0)
+      _lastpos (0),
+      _contention (0)
   {
     // Ignore these signals until they are replaced by a client.
     signal(MallocSignal, SIG_IGN);
@@ -69,7 +70,6 @@ public:
         tprintf::tprintf("Scalene: internal error = @\n", errno);
         abort();
       }
-      tprintf::tprintf("Writing 0\n");
       write(lfd2, "0", strlen("0") + 1);
       close(lfd2);
     } else {
@@ -136,6 +136,7 @@ public:
     assert((sz < 16) || (realSize <= 2 * sz));
     auto sampleMalloc = _mallocSampler.sample(realSize);
     auto sampleCallStack = _callStackSampler.sample(realSize);
+    // tprintf::tprintf("@\n", sampleMalloc);
 #if 1
     if (unlikely(sampleCallStack)) {
       recordCallStack(realSize);
@@ -181,7 +182,8 @@ private:
   int _fd;       // true file descriptor for the log
   char * _mmap;  // address of the first byte of the log
   int _lastpos;  // last position written into the log
-  
+  int _contention; // How many times there's been a lock conflict
+
   void recordCallStack(size_t sz) {
     // Walk the stack to see if this memory was allocated by Python
     // through its object allocation APIs.
@@ -313,11 +315,22 @@ private:
       tprintf::tprintf("Scalene: Error opening lockfile: @\n", errno);
       abort();
     }
-    int res = flock(fd, LOCK_EX);
-    if(res == -1) {
-      tprintf::tprintf("Scalene: Error acquiring memcpy signal file lock: @\n", errno);
-      abort();
-    }
+    useconds_t dt = 10000;
+    int res;
+    int init = _contention;
+    // while((res = flock(fd, LOCK_EX|LOCK_NB)) == -1) {
+      if( flock(fd, LOCK_EX) != -1) {
+        // usleep(dt);
+        // dt *= rand() % 100 + 1;
+        // _contention++;
+      } else {
+        tprintf::tprintf("Scalene: Error acquiring malloc signal file lock: @\n", errno);
+        abort();
+      }
+      // if (_contention != 0)
+      //   tprintf::tprintf("malloc Contention @\n Total sleep @\n", _contention, dt);
+    // }
+    
 //    tprintf::tprintf("Locked");
     if (_pythonCount == 0) {
       _pythonCount = 1; // prevent 0/0

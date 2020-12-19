@@ -24,7 +24,8 @@ public:
   MemcpySampler()
     : _interval (MemcpySamplingRateBytes),
       _memcpyOps (0),
-      _memcpyTriggered (0)
+      _memcpyTriggered (0),
+      _contention (0)
   {
     signal(MemcpySignal, SIG_IGN);
     auto pid = getpid();
@@ -119,16 +120,28 @@ private:
   uint64_t _memcpyOps;
   unsigned long long _memcpyTriggered;
   uint64_t _interval;
+  int _contention;
   char scalene_memcpy_signal_filename[255];
 
   void writeCount() {
     char buf[255];
     stprintf::stprintf(buf, "@,@\n", _memcpyTriggered, _memcpyOps);
     int fd = open(scalene_memcpy_signal_filename, flags, perms);
-    int res = flock(fd, LOCK_EX);
-    if(res == -1) {
-      tprintf::tprintf("Scalene: Error acquiring memcpy signal file lock: @", errno);
-    }
+    useconds_t dt = 10000;
+    int res;
+    int init = _contention;
+    // while((res = flock(fd, LOCK_EX|LOCK_NB)) == -1) {
+      if(flock(fd, LOCK_EX) != -1) {
+        // usleep(dt);
+        // dt *= rand() % 100 + 1;
+        // _contention++;
+      } else {
+        tprintf::tprintf("Scalene: Error acquiring memcpy signal file lock: @\n", errno);
+        abort();
+      }
+    // }
+    // if (_contention - init != 0)
+    //   tprintf::tprintf("memcpy Contention @\n Total sleep @\n", _contention, dt);
     write(fd, buf, strlen(buf));
     res = flock(fd, LOCK_UN);
     if(res == -1) {
