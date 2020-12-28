@@ -479,6 +479,9 @@ class Scalene:
         __malloc_lock_mmap = mmap.mmap(
             __malloc_lock_fd.fileno(), 0, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE
         )
+        __malloc_lock_mmap = mmap.mmap(
+            __malloc_lock_fd.fileno(), 0, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE
+        )
     except BaseException as exc:
         # Ignore if we aren't profiling memory.
         pass
@@ -499,6 +502,9 @@ class Scalene:
             0,
             mmap.MAP_SHARED,
             mmap.PROT_READ,
+        )
+        __memcpy_lock_mmap = mmap.mmap(
+            __memcpy_lock_fd.fileno(), 0, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE
         )
         __memcpy_lock_mmap = mmap.mmap(
             __memcpy_lock_fd.fileno(), 0, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE
