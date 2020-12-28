@@ -482,6 +482,9 @@ class Scalene:
         __malloc_lock_mmap = mmap.mmap(
             __malloc_lock_fd.fileno(), 0, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE
         )
+        __malloc_lock_mmap = mmap.mmap(
+            __malloc_lock_fd.fileno(), 0, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE
+        )
     except BaseException as exc:
         # Ignore if we aren't profiling memory.
         pass
@@ -502,6 +505,9 @@ class Scalene:
             0,
             mmap.MAP_SHARED,
             mmap.PROT_READ,
+        )
+        __memcpy_lock_mmap = mmap.mmap(
+            __memcpy_lock_fd.fileno(), 0, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE
         )
         __memcpy_lock_mmap = mmap.mmap(
             __memcpy_lock_fd.fileno(), 0, mmap.MAP_SHARED, mmap.PROT_READ | mmap.PROT_WRITE
@@ -1134,9 +1140,7 @@ class Scalene:
                 Scalene.__current_footprint)
         after = Scalene.__current_footprint
 
-        # Now update the memory footprint for every running frame.
-        # This is a pain, since we don't know to whom to attribute memory,
-        # so we may overcount.
+            arr.sort()
 
             # Iterate through the array to compute the new current footprint.
             # and update the global __memory_footprint_samples.
