@@ -1132,24 +1132,17 @@ class Scalene:
         # This is a pain, since we don't know to whom to attribute memory,
         # so we may overcount.
 
-        for (frame, _tident, _orig_frame) in new_frames:
-            fname = Filename(frame.f_code.co_filename)
-            lineno = LineNumber(frame.f_lineno)
-            bytei = ByteCodeIndex(frame.f_lasti)
-            # Add the byte index to the set for this line (if it's not there already).
-            Scalene.__bytei_map[fname][lineno].add(bytei)
-            curr = before
-            python_frac = 0.0
-            allocs = 0.0
-            # Go through the array again and add each updated current footprint.
+            # Iterate through the array to compute the new current footprint.
+            # and update the global __memory_footprint_samples.
+            before = Scalene.__current_footprint
             for item in arr:
                 _alloc_time, action, count, python_fraction = item
                 count /= 1024 * 1024
                 is_malloc = action == "M"
                 if is_malloc:
-                    allocs += count
-                    curr += count
-                    python_frac += python_fraction * count
+                    Scalene.__current_footprint += count
+                    if Scalene.__current_footprint > Scalene.__max_footprint:
+                        Scalene.__max_footprint = Scalene.__current_footprint
                 else:
                     curr -= count
                 Scalene.__per_line_footprint_samples[fname][lineno].add(
@@ -1243,6 +1236,10 @@ class Scalene:
         Scalene.__in_signal_handler.release()
        
 
+            Scalene.__in_signal_handler.release()
+        finally:
+            # TODO: wrap this in a contextmanager
+            mmap_hl_spinlock.mmap_unlock(Scalene.__memcpy_lock_mmap)
     @staticmethod
     @lru_cache(None)
     def should_trace(filename: str) -> bool:
