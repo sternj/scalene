@@ -1246,10 +1246,6 @@ class Scalene:
         Scalene.__in_signal_handler.release()
        
 
-            Scalene.__in_signal_handler.release()
-        finally:
-            # TODO: wrap this in a contextmanager
-            mmap_hl_spinlock.mmap_unlock(Scalene.__memcpy_lock_mmap)
     @staticmethod
     @lru_cache(None)
     def should_trace(filename: str) -> bool:
