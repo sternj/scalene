@@ -1139,40 +1139,48 @@ class Scalene:
             Scalene.__memory_footprint_samples.add(
                 Scalene.__current_footprint)
         after = Scalene.__current_footprint
-
-            arr.sort()
-
-            # Iterate through the array to compute the new current footprint.
-            # and update the global __memory_footprint_samples.
-            before = Scalene.__current_footprint
+        for (frame, _tident, _orig_frame) in new_frames:
+            fname = Filename(frame.f_code.co_filename)
+            lineno = LineNumber(frame.f_lineno)
+            bytei = ByteCodeIndex(frame.f_lasti)
+            # Add the byte index to the set for this line (if it's not there already).
+            Scalene.__bytei_map[fname][lineno].add(bytei)
+            curr = before
+            python_frac = 0.0
+            allocs = 0.0
+            # Go through the array again and add each updated current footprint.
             for item in arr:
                 _alloc_time, action, count, python_fraction = item
                 count /= 1024 * 1024
                 is_malloc = action == "M"
                 if is_malloc:
-                    Scalene.__current_footprint += count
-                    if Scalene.__current_footprint > Scalene.__max_footprint:
-                        Scalene.__max_footprint = Scalene.__current_footprint
+                    allocs += count
+                    curr += count
+                    python_frac += python_fraction * count
                 else:
                     curr -= count
-                Scalene.__per_line_footprint_samples[fname][lineno].add(
-                    curr)
+                Scalene.__per_line_footprint_samples[fname][lineno].add(curr)
             assert curr == after
             # If there was a net increase in memory, treat it as if it
             # was a malloc; otherwise, treat it as if it was a
             # free. This is for later reporting of net memory gain /
             # loss per line of code.
             if after > before:
-                Scalene.__memory_malloc_samples[fname][lineno][bytei] += after - before
+                Scalene.__memory_malloc_samples[fname][lineno][bytei] += (
+                    after - before
+                )
                 Scalene.__memory_python_samples[fname][lineno][bytei] += (
                     python_frac / allocs
                 ) * (after - before)
                 Scalene.__malloc_samples[fname] += 1
                 Scalene.__total_memory_malloc_samples += after - before
             else:
-                Scalene.__memory_free_samples[fname][lineno][bytei] += before - after
+                Scalene.__memory_free_samples[fname][lineno][bytei] += (
+                    before - after
+                )
                 Scalene.__memory_free_count[fname][lineno][bytei] += 1
                 Scalene.__total_memory_free_samples += before - after
+
 
 
     @staticmethod
